@@ -1,7 +1,6 @@
 package com.example.orders.repository;
 
 import com.example.orders.model.Order;
-
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;

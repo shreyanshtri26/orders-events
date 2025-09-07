@@ -1,14 +1,13 @@
 package com.example.orders.events;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import java.time.Instant;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class Event {
     private String eventId;
     private Instant timestamp;
-    private String eventType; // Keep original text from input for flexibility
+    private String eventType;
 
     public Event() {}
 

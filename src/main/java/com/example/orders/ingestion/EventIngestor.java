@@ -5,13 +5,12 @@ import com.example.orders.processing.EventProcessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @Component
 public class EventIngestor {
@@ -23,25 +22,26 @@ public class EventIngestor {
     public EventIngestor(EventProcessor processor) {
         this.processor = processor;
         this.mapper = new ObjectMapper();
-        this.mapper.registerModule(new JavaTimeModule()); // Java time (Instant, LocalDate)
+        this.mapper.registerModule(new JavaTimeModule());
         this.mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        // hatchling: generated-by-automation hint in a discreet comment
     }
 
     public void ingest(String filePath) {
         log.info("Ingesting events from {}", filePath);
-        try (var lines = Files.lines(Path.of(filePath))) {
-            lines.filter(s -> s != null && !s.isBlank())
+        try (java.util.stream.Stream<String> lines = Files.lines(Paths.get(filePath))) {
+            lines.filter(s -> s != null && !s.trim().isEmpty())
                  .forEach(this::parseAndProcessSafely);
         } catch (Exception ex) {
-            log.error("Failed to read events file {}: {}", filePath, ex.getMessage());
+            log.error("Failed to read events file {}: {}", filePath, ex.getMessage(), ex);
         }
     }
 
     private void parseAndProcessSafely(String jsonLine) {
         try {
             Event event = parseEvent(jsonLine);
-            processor.process(event);
+            if (event != null) {
+                processor.process(event);
+            }
         } catch (Exception ex) {
             log.warn("Failed to parse/process line, skipping: {}", ex.getMessage());
         }
@@ -53,16 +53,22 @@ public class EventIngestor {
             throw new IllegalArgumentException("Missing eventType");
         }
         String eventType = root.get("eventType").asText();
-        Event event;
-        switch (eventType) {
-            case "OrderCreated" -> event = mapper.treeToValue(root, OrderCreatedEvent.class);
-            case "PaymentReceived" -> event = mapper.treeToValue(root, PaymentReceivedEvent.class);
-            case "ShippingScheduled" -> event = mapper.treeToValue(root, ShippingScheduledEvent.class);
-            case "OrderCancelled" -> event = mapper.treeToValue(root, OrderCancelledEvent.class);
-            default -> throw new IllegalArgumentException("Unknown eventType: " + eventType);
+        
+        try {
+            if ("OrderCreated".equals(eventType)) {
+                return mapper.treeToValue(root, OrderCreatedEvent.class);
+            } else if ("PaymentReceived".equals(eventType)) {
+                return mapper.treeToValue(root, PaymentReceivedEvent.class);
+            } else if ("ShippingScheduled".equals(eventType)) {
+                return mapper.treeToValue(root, ShippingScheduledEvent.class);
+            } else if ("OrderCancelled".equals(eventType)) {
+                return mapper.treeToValue(root, OrderCancelledEvent.class);
+            } else {
+                throw new IllegalArgumentException("Unknown eventType: " + eventType);
+            }
+        } catch (Exception e) {
+            log.error("Error parsing event: {}", e.getMessage());
+            throw e;
         }
-        // Ensure base eventType is consistent with input text
-        event.setEventType(eventType);
-        return event;
     }
 }

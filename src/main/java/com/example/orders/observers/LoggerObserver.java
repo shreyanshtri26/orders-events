@@ -13,8 +13,11 @@ public class LoggerObserver implements OrderObserver {
 
     @Override
     public void onEventProcessed(Event event, Order order) {
-        log.info("Event processed: type={}, id={}, orderId={}", event.getEventType(), event.getEventId(),
-                order != null ? order.getOrderId() : "N/A");
+        String orderId = order != null ? order.getOrderId() : "N/A";
+        log.info("Event processed: type={}, id={}, orderId={}", 
+                event.getEventType(), 
+                event.getEventId(),
+                orderId);
     }
 
     @Override

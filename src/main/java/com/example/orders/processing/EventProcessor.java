@@ -1,16 +1,10 @@
 package com.example.orders.processing;
 
-import com.example.orders.events.OrderCancelledEvent;
-import com.example.orders.events.OrderCreatedEvent;
-import com.example.orders.events.PaymentReceivedEvent;
-import com.example.orders.events.ShippingScheduledEvent;
-import com.example.orders.events.Event;
+import com.example.orders.events.*;
 import com.example.orders.model.Order;
-import com.example.orders.model.OrderItem;
 import com.example.orders.model.OrderStatus;
 import com.example.orders.observers.OrderObserver;
 import com.example.orders.repository.OrderRepository;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -37,29 +31,45 @@ public class EventProcessor {
         }
         String type = event.getEventType();
         try {
-            switch (type) {
-                case "OrderCreated" -> handle((OrderCreatedEvent) event);
-                case "PaymentReceived" -> handle((PaymentReceivedEvent) event);
-                case "ShippingScheduled" -> handle((ShippingScheduledEvent) event);
-                case "OrderCancelled" -> handle((OrderCancelledEvent) event);
-                default -> log.warn("Unknown event type: {}", type);
+            if ("OrderCreated".equals(type)) {
+                handle((OrderCreatedEvent) event);
+            } else if ("PaymentReceived".equals(type)) {
+                handle((PaymentReceivedEvent) event);
+            } else if ("ShippingScheduled".equals(type)) {
+                handle((ShippingScheduledEvent) event);
+            } else if ("OrderCancelled".equals(type)) {
+                handle((OrderCancelledEvent) event);
+            } else {
+                log.warn("Unknown event type: {}", type);
             }
         } catch (ClassCastException cce) {
             log.warn("Event payload did not match expected type for eventType={}: {}", type, cce.getMessage());
         } finally {
             // Notify observers that an event has been processed (if order exists)
             if (event != null) {
-                repository.findById(extractOrderId(event)).ifPresent(order ->
-                        observers.forEach(o -> o.onEventProcessed(event, order)));
+                String orderId = extractOrderId(event);
+                if (orderId != null) {
+                    Order order = repository.findById(orderId).orElse(null);
+                    if (order != null) {
+                        for (OrderObserver o : observers) {
+                            o.onEventProcessed(event, order);
+                        }
+                    }
+                }
             }
         }
     }
 
     private String extractOrderId(Event event) {
-        if (event instanceof OrderCreatedEvent oce) return oce.getOrderId();
-        if (event instanceof PaymentReceivedEvent pre) return pre.getOrderId();
-        if (event instanceof ShippingScheduledEvent sse) return sse.getOrderId();
-        if (event instanceof OrderCancelledEvent oce) return oce.getOrderId();
+        if (event instanceof OrderCreatedEvent) {
+            return ((OrderCreatedEvent) event).getOrderId();
+        } else if (event instanceof PaymentReceivedEvent) {
+            return ((PaymentReceivedEvent) event).getOrderId();
+        } else if (event instanceof ShippingScheduledEvent) {
+            return ((ShippingScheduledEvent) event).getOrderId();
+        } else if (event instanceof OrderCancelledEvent) {
+            return ((OrderCancelledEvent) event).getOrderId();
+        }
         return null;
     }
 
@@ -75,7 +85,8 @@ public class EventProcessor {
     }
 
     private void handle(PaymentReceivedEvent e) {
-        repository.findById(e.getOrderId()).ifPresentOrElse(order -> {
+        Order order = repository.findById(e.getOrderId()).orElse(null);
+        if (order != null) {
             OrderStatus prev = order.getStatus();
             BigDecimal paid = e.getAmountPaid() == null ? BigDecimal.ZERO : e.getAmountPaid();
             BigDecimal total = order.getTotalAmount() == null ? BigDecimal.ZERO : order.getTotalAmount();
@@ -92,27 +103,35 @@ public class EventProcessor {
 
             repository.save(order);
             notifyIfStatusChanged(order.getOrderId(), prev, order.getStatus());
-        }, () -> log.warn("Payment for unknown order {}, ignoring", e.getOrderId()));
+        } else {
+            log.warn("Payment for unknown order {}, ignoring", e.getOrderId());
+        }
     }
 
     private void handle(ShippingScheduledEvent e) {
-        repository.findById(e.getOrderId()).ifPresentOrElse(order -> {
+        Order order = repository.findById(e.getOrderId()).orElse(null);
+        if (order != null) {
             OrderStatus prev = order.getStatus();
             order.setStatus(OrderStatus.SHIPPED);
             order.appendHistory(historyLine(e, "Shipping scheduled for " + e.getShippingDate()));
             repository.save(order);
             notifyIfStatusChanged(order.getOrderId(), prev, order.getStatus());
-        }, () -> log.warn("Shipping scheduled for unknown order {}, ignoring", e.getOrderId()));
+        } else {
+            log.warn("Shipping scheduled for unknown order {}, ignoring", e.getOrderId());
+        }
     }
 
     private void handle(OrderCancelledEvent e) {
-        repository.findById(e.getOrderId()).ifPresentOrElse(order -> {
+        Order order = repository.findById(e.getOrderId()).orElse(null);
+        if (order != null) {
             OrderStatus prev = order.getStatus();
             order.setStatus(OrderStatus.CANCELLED);
             order.appendHistory(historyLine(e, "Order cancelled: " + e.getReason()));
             repository.save(order);
             notifyIfStatusChanged(order.getOrderId(), prev, order.getStatus());
-        }, () -> log.warn("Cancellation for unknown order {}, ignoring", e.getOrderId()));
+        } else {
+            log.warn("Cancellation for unknown order {}, ignoring", e.getOrderId());
+        }
     }
 
     private void notifyIfStatusChanged(String orderId, OrderStatus prev, OrderStatus next) {

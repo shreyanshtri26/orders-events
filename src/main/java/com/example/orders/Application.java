@@ -19,7 +19,7 @@ public class Application implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         // Default file if not provided via args
-        String path = args != null && args.length > 0 ? args : "src/main/resources/events.jsonl";
+        String path = args.length > 0 ? args[0] : "src/main/resources/events.jsonl";
         eventIngestor.ingest(path);
     }
 }

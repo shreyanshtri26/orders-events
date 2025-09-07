@@ -55,4 +55,24 @@ public class Order {
     public void appendHistory(String entry) {
         this.eventHistory.add(entry);
     }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
+    }
+
+    public void setCustomerId(String customerId) {
+        this.customerId = customerId;
+    }
+
+    public void setItems(List<OrderItem> items) {
+        this.items = items;
+    }
+
+    public void setTotalAmount(BigDecimal totalAmount) {
+        this.totalAmount = totalAmount;
+    }
+
+    public void setEventHistory(List<String> eventHistory) {
+        this.eventHistory = eventHistory;
+    }
 }
